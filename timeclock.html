@@ -434,11 +434,11 @@ async function ghCreate(){
   return (await r.json()).id;
 }
 
-let syncStatus="off", pushTimer=null;   // off | ok | syncing | pending | offline | error
+let syncStatus="off", pushTimer=null, pendingPush=false;   // pendingPush = unsynced local user change
 function setSync(s){ syncStatus=s; paintSync(); }
-function schedulePush(){ if(!isSyncOn())return; setSync("pending"); clearTimeout(pushTimer); pushTimer=setTimeout(doPush,2000); }
+function schedulePush(){ pendingPush=true; if(!isSyncOn())return; setSync("pending"); clearTimeout(pushTimer); pushTimer=setTimeout(doPush,2000); }
 async function doPush(){ if(!isSyncOn())return; setSync("syncing");
-  try{ await ghPatch(); sync.lastSyncedAt=Date.now(); saveSync(); setSync("ok"); }
+  try{ await ghPatch(); pendingPush=false; sync.lastSyncedAt=Date.now(); saveSync(); setSync("ok"); }
   catch(e){ setSync(navigator.onLine?"error":"offline"); } }
 async function syncNow(){   // reconcile both directions (also the pull-on-open)
   if(!isSyncOn()){ setSync("off"); return; }
@@ -447,9 +447,16 @@ async function syncNow(){   // reconcile both directions (also the pull-on-open)
     const remote=await ghGet();
     if(remote && remote.meta){
       const rU=remote.meta.updatedAt||0, lU=state.meta.updatedAt||0;
-      if(rU>lU){ state={config:{...defaults.config,...remote.config}, sessions:remote.sessions||[], outDays:remote.outDays||{}, meta:remote.meta}; persist(); render(); refreshSheet(); }
-      else if(lU>rU){ await ghPatch(); }
-    } else { await ghPatch(); }   // gist empty/new → seed it with local
+      if(pendingPush){
+        // a deliberate local change this session must never be reverted by a pull — local wins.
+        if(rU>=lU){ state.meta.updatedAt=rU+1; persist(); }  // outstamp remote so future pulls agree
+        await ghPatch(); pendingPush=false;
+      } else if(rU>lU){
+        state={config:{...defaults.config,...remote.config}, sessions:remote.sessions||[], outDays:remote.outDays||{}, meta:remote.meta}; persist(); render(); refreshSheet();
+      } else if(lU>rU){
+        await ghPatch();
+      }
+    } else { await ghPatch(); pendingPush=false; }   // gist empty/new → seed it with local
     sync.lastSyncedAt=Date.now(); saveSync(); setSync("ok");
   }catch(e){ setSync(navigator.onLine?"error":"offline"); }
 }
