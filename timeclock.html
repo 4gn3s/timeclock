@@ -7,7 +7,7 @@
 <meta name="theme-color" content="#14171C">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<link rel="manifest" href='data:application/json,{"name":"Timeclock","short_name":"Timeclock","display":"standalone","background_color":"%2314171C","theme_color":"%2314171C","start_url":"./","icons":[{"src":"data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 512 512%27%3E%3Crect width=%27512%27 height=%27512%27 rx=%27110%27 fill=%27%2314171C%27/%3E%3Ccircle cx=%27256%27 cy=%27256%27 r=%27150%27 fill=%27none%27 stroke=%27%233DDC97%27 stroke-width=%2726%27/%3E%3Cpath d=%27M256 170v92l60 40%27 fill=%27none%27 stroke=%27%233DDC97%27 stroke-width=%2726%27 stroke-linecap=%27round%27 stroke-linejoin=%27round%27/%3E%3C/svg%3E","sizes":"512x512","type":"image/svg+xml"}]}'>
+<link rel="manifest" href='data:application/json,{"name":"Timeclock","short_name":"Timeclock","display":"standalone","launch_handler":{"client_mode":"navigate-existing"},"background_color":"%2314171C","theme_color":"%2314171C","start_url":"./","icons":[{"src":"data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 512 512%27%3E%3Crect width=%27512%27 height=%27512%27 rx=%27110%27 fill=%27%2314171C%27/%3E%3Ccircle cx=%27256%27 cy=%27256%27 r=%27150%27 fill=%27none%27 stroke=%27%233DDC97%27 stroke-width=%2726%27/%3E%3Cpath d=%27M256 170v92l60 40%27 fill=%27none%27 stroke=%27%233DDC97%27 stroke-width=%2726%27 stroke-linecap=%27round%27 stroke-linejoin=%27round%27/%3E%3C/svg%3E","sizes":"512x512","type":"image/svg+xml"}]}'>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
@@ -297,6 +297,11 @@ p.shp{font-size:12.5px;color:var(--muted);padding:0 2px 4px;line-height:1.5}
       <p class="shp">Once this app is hosted at a real URL, write this address to the sticker with any NFC-writer app (e.g. NFC Tools). Every tap opens the app and flips the clock.</p>
       <div class="urlbox" id="tagUrl">host this file first</div>
       <button class="btn ghost" id="copyUrl">Copy tag URL</button>
+      <div id="webnfcWrap" style="margin-top:20px;display:none">
+        <h2 class="sh">Tap-to-clock while app is open</h2>
+        <p class="shp">The most reliable option: with this on and the app open, tapping the sticker flips the clock instantly — no notification, one tap. Great for a phone stand at your desk. (Chrome on Android only.)</p>
+        <button class="btn" id="armNfcBtn">Turn on tap-to-clock</button>
+      </div>
       <p class="shp" style="margin-top:16px">Want a truly silent one-tap (no browser opening)? See the Tasker note in the chat.</p>
     </div>
 
@@ -552,6 +557,22 @@ function paintSync(){
 }
 function refreshSheet(){ if(!sheet.classList.contains("open"))return; fillSettings(); fillSessions(); fillOff(); }
 
+/* ---------- Web NFC: read the sticker directly while the app is open ---------- */
+let nfcArmed=false;
+function updateArmBtn(){ const b=document.getElementById("armNfcBtn"); if(!b)return; b.textContent=nfcArmed?"Tap-to-clock is ON":"Turn on tap-to-clock"; b.classList.toggle("ghost",nfcArmed); }
+async function armNfc(silent){
+  if(nfcArmed) return true;
+  if(!("NDEFReader" in window)){ if(!silent) toast("Web NFC needs Chrome on Android"); return false; }
+  try{
+    const r=new NDEFReader();
+    await r.scan();                       // requires a user gesture
+    r.onreading=()=>toggleClock(true);    // 2.5s debounce guards against multi-record double-fire
+    nfcArmed=true; sync.nfcPref=true; saveSync(); updateArmBtn();
+    if(!silent) toast("Tap-to-clock is on — tap your sticker");
+    return true;
+  }catch(e){ if(!silent) toast("Couldn't start NFC (permission or unsupported)"); return false; }
+}
+
 /* ---------- UI wiring ---------- */
 document.getElementById("punch").addEventListener("click",()=>toggleClock(false));
 const sheet=document.getElementById("sheet");
@@ -675,6 +696,14 @@ document.getElementById("syNow").addEventListener("click",async()=>{ if(!isSyncO
 document.getElementById("syCopyGist").addEventListener("click",async()=>{ const g=document.getElementById("syGistInput").value.trim(); if(!g){toast("No gist ID yet");return;} try{await navigator.clipboard.writeText(g);toast("Gist ID copied");}catch(e){toast("Copy failed");} });
 document.getElementById("syDisconnect").addEventListener("click",()=>{ delete sync.token; delete sync.gistId; delete sync.lastSyncedAt; saveSync(); setSync("off"); fillSync(); toast("Disconnected (local data kept)"); });
 document.getElementById("syncDot").addEventListener("click",()=>{ openSheet(); document.querySelector('.seg button[data-tab="sync"]').click(); });
+
+/* ---------- Web NFC wiring ---------- */
+if("NDEFReader" in window){
+  document.getElementById("webnfcWrap").style.display="block";
+  document.getElementById("armNfcBtn").addEventListener("click",()=>armNfc(false));
+  updateArmBtn();
+  if(sync.nfcPref) document.addEventListener("pointerdown",()=>armNfc(true),{once:true}); // re-arm on first tap each session
+}
 
 /* ---------- tick + startup ---------- */
 setInterval(()=>{ if(openSession()) render(); },1000);
