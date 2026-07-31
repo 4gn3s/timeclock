@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Timeclock</title>
+<meta name="theme-color" content="#14171C">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href='data:application/json,{"name":"Timeclock","short_name":"Timeclock","display":"standalone","background_color":"%2314171C","theme_color":"%2314171C","start_url":"./","icons":[{"src":"data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 512 512%27%3E%3Crect width=%27512%27 height=%27512%27 rx=%27110%27 fill=%27%2314171C%27/%3E%3Ccircle cx=%27256%27 cy=%27256%27 r=%27150%27 fill=%27none%27 stroke=%27%233DDC97%27 stroke-width=%2726%27/%3E%3Cpath d=%27M256 170v92l60 40%27 fill=%27none%27 stroke=%27%233DDC97%27 stroke-width=%2726%27 stroke-linecap=%27round%27 stroke-linejoin=%27round%27/%3E%3C/svg%3E","sizes":"512x512","type":"image/svg+xml"}]}'>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#14171C; --bg2:#181C22; --surface:#1D222A; --surface2:#232935;
+  --line:rgba(255,255,255,.08); --line2:rgba(255,255,255,.14);
+  --text:#EAECEF; --muted:#9AA1AB; --faint:#626B78;
+  --active:#3DDC97; --active-dim:#1f7d5a;
+  --amber:#F0B36B; --behind:#E5675C; --ahead:#3DDC97;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --sans:"Space Grotesk",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{
+  background:radial-gradient(120% 90% at 50% -10%,#1b2029 0%,var(--bg) 55%) fixed;
+  color:var(--text); font-family:var(--sans); font-size:16px;
+  line-height:1.4; -webkit-font-smoothing:antialiased;
+  padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+.wrap{max-width:480px;margin:0 auto;padding:14px 16px 40px;min-height:100%}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+
+/* top bar */
+.top{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.qchip{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:12.5px;
+  color:var(--muted);background:var(--surface);border:1px solid var(--line);
+  padding:7px 11px;border-radius:999px;letter-spacing:.02em}
+.qchip b{color:var(--text);font-weight:500}
+.gear{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);
+  background:var(--surface);color:var(--muted);display:grid;place-items:center;cursor:pointer}
+.gear:hover{color:var(--text);border-color:var(--line2)}
+
+/* hero */
+.hero{background:linear-gradient(180deg,var(--surface) 0%,var(--bg2) 100%);
+  border:1px solid var(--line);border-radius:22px;padding:22px 20px 20px;
+  position:relative;overflow:hidden}
+.hero.on{border-color:var(--active-dim);box-shadow:0 0 0 1px rgba(61,220,151,.15),0 18px 50px -28px rgba(61,220,151,.55)}
+.statusline{display:flex;align-items:center;gap:9px;margin-bottom:2px}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--faint);flex:none}
+.hero.on .dot{background:var(--active);box-shadow:0 0 0 0 rgba(61,220,151,.55);animation:pulse 2.4s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(61,220,151,.5)}70%{box-shadow:0 0 0 9px rgba(61,220,151,0)}100%{box-shadow:0 0 0 0 rgba(61,220,151,0)}}
+.status{font-size:12px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--faint)}
+.hero.on .status{color:var(--active)}
+.todaylabel{color:var(--muted);font-size:13px;margin-top:14px}
+.bignum{font-family:var(--mono);font-weight:500;font-size:60px;line-height:1;letter-spacing:-.03em;margin:2px 0 2px;font-variant-numeric:tabular-nums}
+.bignum .u{font-size:26px;color:var(--faint);font-weight:400}
+.sessionline{font-family:var(--mono);font-size:13px;color:var(--muted);min-height:18px}
+.hero.on .sessionline b{color:var(--active);font-weight:500}
+
+.punch{width:100%;margin-top:18px;border:none;border-radius:16px;padding:17px;
+  font-family:var(--sans);font-size:17px;font-weight:600;letter-spacing:.01em;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;gap:10px;transition:transform .06s ease,filter .15s}
+.punch:active{transform:scale(.985)}
+.punch.in{background:var(--active);color:#08150e}
+.punch.in:hover{filter:brightness(1.05)}
+.punch.out{background:var(--surface2);color:var(--text);border:1px solid var(--line2)}
+.punch.out:hover{border-color:var(--faint)}
+.punch svg{width:19px;height:19px}
+
+/* cards */
+.grid{display:grid;gap:12px;margin-top:12px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:16px 17px}
+.card h3{font-size:11.5px;font-weight:600;letter-spacing:.15em;text-transform:uppercase;color:var(--faint);margin-bottom:12px;display:flex;justify-content:space-between;align-items:baseline}
+.card h3 .r{letter-spacing:0;text-transform:none;font-weight:400;font-size:12px;color:var(--muted)}
+
+.remain{display:flex;align-items:baseline;gap:10px}
+.remain .big{font-family:var(--mono);font-size:30px;font-weight:500;letter-spacing:-.02em}
+.remain .lbl{font-size:13px;color:var(--muted)}
+.remain.done .big{color:var(--ahead)}
+.subnote{font-size:12.5px;color:var(--faint);margin-top:6px;font-family:var(--mono)}
+
+.bar{height:8px;border-radius:6px;background:var(--surface2);overflow:hidden;margin:12px 0 6px}
+.bar > i{display:block;height:100%;border-radius:6px;background:var(--active);transition:width .4s ease}
+.bar.over > i{background:var(--amber)}
+
+.wkrow{display:flex;justify-content:space-between;gap:6px;margin-top:14px}
+.day{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px}
+.day .col{width:100%;height:46px;background:var(--surface2);border-radius:6px;position:relative;overflow:hidden;display:flex;align-items:flex-end}
+.day .col > i{display:block;width:100%;background:var(--active-dim);border-radius:6px}
+.day.today .col{outline:1px solid var(--line2)}
+.day.today .col > i{background:var(--active)}
+.day.off .col{background:repeating-linear-gradient(-45deg,var(--surface2),var(--surface2) 4px,transparent 4px,transparent 8px)}
+.day.out .col{background:rgba(240,179,107,.14)}
+.day .dl{font-family:var(--mono);font-size:10.5px;color:var(--faint)}
+.day.today .dl{color:var(--text)}
+.day .dh{font-family:var(--mono);font-size:10px;color:var(--muted);min-height:12px}
+
+.balance{display:flex;align-items:baseline;gap:8px}
+.balance .num{font-family:var(--mono);font-size:38px;font-weight:600;letter-spacing:-.03em}
+.balance.ahead .num{color:var(--ahead)}
+.balance.behind .num{color:var(--behind)}
+.balance .tag{font-size:12.5px;color:var(--muted)}
+.qmeta{display:flex;gap:18px;margin-top:14px}
+.qmeta .m{display:flex;flex-direction:column;gap:3px}
+.qmeta .m .k{font-size:11px;color:var(--faint);letter-spacing:.06em;text-transform:uppercase}
+.qmeta .m .v{font-family:var(--mono);font-size:16px;color:var(--text)}
+
+.hint{font-size:11px;color:var(--faint);text-align:center;margin-top:22px;line-height:1.5}
+.hint code{font-family:var(--mono);color:var(--muted);background:var(--surface);padding:2px 6px;border-radius:5px;font-size:11px}
+
+.membanner{background:rgba(240,179,107,.1);border:1px solid rgba(240,179,107,.3);color:var(--amber);
+  font-size:12px;padding:10px 12px;border-radius:12px;margin-bottom:14px;line-height:1.45}
+
+/* toast */
+.toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(20px);
+  background:var(--surface2);border:1px solid var(--line2);color:var(--text);
+  padding:11px 18px;border-radius:999px;font-size:14px;opacity:0;pointer-events:none;
+  transition:.25s;z-index:60;font-family:var(--mono);box-shadow:0 12px 40px -12px #000}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* sheet */
+.sheet{position:fixed;inset:0;background:rgba(8,10,13,.6);backdrop-filter:blur(3px);
+  display:none;z-index:50;align-items:flex-end;justify-content:center}
+.sheet.open{display:flex}
+.panel{background:var(--bg2);border:1px solid var(--line);border-bottom:none;
+  border-radius:22px 22px 0 0;width:100%;max-width:480px;max-height:92vh;overflow-y:auto;
+  padding:8px 16px calc(24px + env(safe-area-inset-bottom))}
+.grab{width:38px;height:4px;border-radius:3px;background:var(--line2);margin:8px auto 12px}
+.seg{display:flex;gap:4px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:4px;margin-bottom:16px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.seg::-webkit-scrollbar{display:none}
+.seg button{flex:1 0 auto;border:none;background:none;color:var(--muted);font-family:var(--sans);
+  font-size:13px;font-weight:500;padding:9px 12px;border-radius:9px;cursor:pointer;white-space:nowrap}
+.seg button.active{background:var(--surface2);color:var(--text)}
+.tab{display:none}.tab.active{display:block}
+
+label.f{display:block;font-size:12.5px;color:var(--muted);margin:14px 0 6px;font-weight:500}
+input[type=number],input[type=text],input[type=date],input[type=time],select,textarea{
+  width:100%;background:var(--surface);border:1px solid var(--line2);color:var(--text);
+  font-family:var(--mono);font-size:15px;padding:11px 12px;border-radius:11px;outline:none}
+input:focus,select:focus,textarea:focus{border-color:var(--active)}
+textarea{font-size:12px;line-height:1.5;resize:vertical;min-height:90px}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chips button{flex:1;min-width:42px;border:1px solid var(--line2);background:var(--surface);
+  color:var(--muted);font-family:var(--mono);font-size:13px;padding:10px 0;border-radius:10px;cursor:pointer}
+.chips button.on{background:var(--active);color:#08150e;border-color:var(--active);font-weight:700}
+.help{font-size:11.5px;color:var(--faint);margin-top:6px;line-height:1.5}
+.btn{width:100%;border:none;border-radius:12px;padding:13px;font-family:var(--sans);font-weight:600;
+  font-size:15px;cursor:pointer;margin-top:16px;background:var(--active);color:#08150e}
+.btn.ghost{background:var(--surface2);color:var(--text);border:1px solid var(--line2)}
+.btn.danger{background:rgba(229,103,92,.14);color:var(--behind);border:1px solid rgba(229,103,92,.35)}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.row3{display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end}
+
+.list{margin-top:4px}
+.item{display:flex;align-items:center;justify-content:space-between;gap:10px;
+  padding:11px 12px;background:var(--surface);border:1px solid var(--line);border-radius:12px;margin-top:8px}
+.item .meta{font-family:var(--mono);font-size:13px}
+.item .meta .d{color:var(--muted);font-size:11.5px}
+.item .meta .h{color:var(--text)}
+.item .x{border:none;background:none;color:var(--faint);cursor:pointer;font-size:20px;padding:0 4px;line-height:1}
+.item .x:hover{color:var(--behind)}
+.daygroup{margin-top:16px}
+.daygroup .gh{font-size:11.5px;color:var(--faint);letter-spacing:.08em;text-transform:uppercase;
+  display:flex;justify-content:space-between;padding:0 2px 4px}
+.daygroup .gh b{color:var(--text);font-family:var(--mono);font-weight:500}
+.empty{color:var(--faint);font-size:13px;text-align:center;padding:22px 0}
+.urlbox{font-family:var(--mono);font-size:11.5px;color:var(--active);background:var(--surface);
+  border:1px solid var(--line2);border-radius:11px;padding:12px;word-break:break-all;margin-top:8px;line-height:1.5}
+h2.sh{font-size:15px;font-weight:600;margin:2px 0 2px;padding:0 2px}
+p.shp{font-size:12.5px;color:var(--muted);padding:0 2px 4px;line-height:1.5}
+.syncdot{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--surface);color:var(--faint);display:grid;place-items:center;cursor:pointer}
+.syncdot.spin svg{animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.syncstatus{font-family:var(--mono);font-size:12.5px;color:var(--muted);background:var(--surface);border:1px solid var(--line);border-radius:11px;padding:10px 12px;margin:6px 0 4px}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div class="qchip">Quarter <b id="qname">—</b><span id="qdates" style="color:var(--faint)"></span></div>
+    <div style="display:flex;gap:8px;align-items:center">
+    <div class="syncdot" id="syncDot" style="display:none" aria-label="Sync status">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 17.6A5 5 0 0 0 18 8h-1.3A7 7 0 1 0 5 14.9"/><path d="M8 16l4 4 4-4"/><path d="M12 12v8"/></svg>
+    </div>
+    <div class="gear" id="openManage" aria-label="Manage">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </div>
+    </div>
+  </div>
+
+  <div id="memBanner" class="membanner" style="display:none"></div>
+
+  <div class="hero" id="hero">
+    <div class="statusline"><span class="dot"></span><span class="status" id="statusText">Not working</span></div>
+    <div class="todaylabel">Worked today</div>
+    <div class="bignum mono" id="todayBig">0<span class="u">:00</span></div>
+    <div class="sessionline mono" id="sessionLine">Tap the sticker or the button to clock in</div>
+    <button class="punch out" id="punch">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+      <span id="punchLabel">Clock in</span>
+    </button>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h3>Today <span class="r" id="todayTarget">target —</span></h3>
+      <div class="remain" id="todayRemain"><span class="big mono">—</span><span class="lbl">to go</span></div>
+      <div class="subnote" id="todaySub"></div>
+    </div>
+
+    <div class="card">
+      <h3>This week <span class="r" id="weekRange"></span></h3>
+      <div class="remain"><span class="big mono" id="weekWorked">—</span><span class="lbl" id="weekTargetLbl">of —</span></div>
+      <div class="bar" id="weekBar"><i style="width:0%"></i></div>
+      <div class="subnote" id="weekSub"></div>
+      <div class="wkrow" id="weekRow"></div>
+    </div>
+
+    <div class="card">
+      <h3>Quarter balance <span class="r" id="qtag"></span></h3>
+      <div class="balance" id="qBalance"><span class="num mono">—</span><span class="tag">on target</span></div>
+      <div class="qmeta">
+        <div class="m"><span class="k">Worked</span><span class="v mono" id="qWorked">—</span></div>
+        <div class="m"><span class="k">Required so far</span><span class="v mono" id="qRequired">—</span></div>
+      </div>
+      <div class="subnote" id="qPace" style="margin-top:14px"></div>
+    </div>
+  </div>
+
+  <div class="hint">Data is stored only on this device. Back it up in <b>Manage → Backup</b>.<br>To arm the NFC sticker, copy the tag URL from <b>Manage → NFC</b>.</div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- MANAGE SHEET -->
+<div class="sheet" id="sheet">
+  <div class="panel">
+    <div class="grab"></div>
+    <div class="seg">
+      <button data-tab="sessions" class="active">Sessions</button>
+      <button data-tab="timeoff">Time off</button>
+      <button data-tab="settings">Settings</button>
+      <button data-tab="nfc">NFC</button>
+      <button data-tab="sync">Sync</button>
+      <button data-tab="backup">Backup</button>
+    </div>
+
+    <!-- SESSIONS -->
+    <div class="tab active" id="tab-sessions">
+      <h2 class="sh">Add or fix a session</h2>
+      <p class="shp">Forgot to tap? Add the hours by hand, or delete a stray entry.</p>
+      <div class="row3">
+        <div><label class="f">Date</label><input type="date" id="mDate"></div>
+        <div><label class="f">Start</label><input type="time" id="mStart"></div>
+        <div><label class="f">End</label><input type="time" id="mEnd"></div>
+      </div>
+      <button class="btn" id="addSession">Add session</button>
+      <div class="list" id="sessionList"></div>
+    </div>
+
+    <!-- TIME OFF -->
+    <div class="tab" id="tab-timeoff">
+      <h2 class="sh">Mark days off</h2>
+      <p class="shp">Holidays, sick days, or anything else. These days carry no required hours, so they never count against you.</p>
+      <div class="row3">
+        <div><label class="f">From</label><input type="date" id="oFrom"></div>
+        <div><label class="f">To</label><input type="date" id="oTo"></div>
+        <div style="min-width:96px"><label class="f">Type</label>
+          <select id="oType"><option>Holiday</option><option>Sick</option><option>Public holiday</option><option>Other</option></select>
+        </div>
+      </div>
+      <button class="btn" id="addOff">Mark off</button>
+      <div class="list" id="offList"></div>
+    </div>
+
+    <!-- SETTINGS -->
+    <div class="tab" id="tab-settings">
+      <h2 class="sh">Your schedule</h2>
+      <p class="shp">The employer checks the quarter total, so these numbers just set your pace.</p>
+      <label class="f">Weekly target (hours)</label>
+      <input type="number" id="sWeekly" min="0" step="0.5">
+      <div class="help" id="fteHelp"></div>
+      <label class="f">Working days</label>
+      <div class="chips" id="sDays"></div>
+      <div class="help" id="dailyHelp"></div>
+      <label class="f">Week starts on</label>
+      <select id="sWeekStart"><option value="1">Monday</option><option value="0">Sunday</option></select>
+      <button class="btn" id="saveSettings">Save schedule</button>
+    </div>
+
+    <!-- NFC -->
+    <div class="tab" id="tab-nfc">
+      <h2 class="sh">Arm your NFC sticker</h2>
+      <p class="shp">Once this app is hosted at a real URL, write this address to the sticker with any NFC-writer app (e.g. NFC Tools). Every tap opens the app and flips the clock.</p>
+      <div class="urlbox" id="tagUrl">host this file first</div>
+      <button class="btn ghost" id="copyUrl">Copy tag URL</button>
+      <p class="shp" style="margin-top:16px">Want a truly silent one-tap (no browser opening)? See the Tasker note in the chat.</p>
+    </div>
+
+    <!-- SYNC -->
+    <div class="tab" id="tab-sync">
+      <h2 class="sh">Sync across devices</h2>
+      <p class="shp">Your hours are stored in one private GitHub gist that every device shares. Pulls when you open, pushes when you clock in/out. Last write wins.</p>
+      <div class="syncstatus" id="syncStatusLine">Not connected.</div>
+
+      <label class="f">GitHub token <span style="color:var(--faint)">(classic, <code style="font-family:var(--mono)">gist</code> scope only)</span></label>
+      <input type="password" id="syTokenInput" placeholder="ghp_… — stays on this device, never in the gist" autocomplete="off">
+      <label class="f">Gist ID</label>
+      <input type="text" id="syGistInput" placeholder="paste the ID, or create a new gist below">
+      <div class="row2" style="margin-top:10px">
+        <button class="btn ghost" id="syCreate" style="margin-top:0">Create new gist</button>
+        <button class="btn ghost" id="syCopyGist" style="margin-top:0">Copy gist ID</button>
+      </div>
+      <button class="btn" id="syConnect">Connect &amp; sync</button>
+      <button class="btn ghost" id="syNow">Sync now</button>
+      <button class="btn danger" id="syDisconnect">Disconnect</button>
+      <p class="shp" style="margin-top:14px">First device: paste your token, tap <b>Create new gist</b>, then copy the gist ID. Other devices: paste the same gist ID + their own token, then <b>Connect</b>. The token grants access to your gists only — revoke it anytime in GitHub settings.</p>
+    </div>
+
+    <!-- BACKUP -->
+    <div class="tab" id="tab-backup">
+      <h2 class="sh">Backup &amp; restore</h2>
+      <p class="shp">Everything lives on this device only. Export regularly, and after clearing browser data.</p>
+      <button class="btn" id="exportBtn">Download backup (.json)</button>
+      <button class="btn ghost" id="copyBtn">Copy backup to clipboard</button>
+      <label class="f">Restore from backup</label>
+      <textarea id="importArea" placeholder="Paste a backup here, then Restore"></textarea>
+      <button class="btn ghost" id="importBtn">Restore</button>
+      <button class="btn danger" id="wipeBtn">Erase all data</button>
+    </div>
+
+    <button class="btn ghost" id="closeSheet" style="margin-top:22px">Close</button>
+  </div>
+</div>
+
+<script>
+"use strict";
+const HR=3600000, MIN=60000;
+/* ---------- storage with in-memory fallback (Claude preview / private mode) ---------- */
+let usingMemory=false;
+const store=(()=>{ try{const t="__tc_probe";localStorage.setItem(t,"1");localStorage.removeItem(t);return localStorage;}
+  catch(e){usingMemory=true;const m={};return{getItem:k=>k in m?m[k]:null,setItem:(k,v)=>{m[k]=String(v);},removeItem:k=>{delete m[k];}};} })();
+const KEY="timeclock.v1";
+const SYNCKEY="timeclock.sync";   // device-local: token, gistId, myDeviceId — NEVER pushed to the gist
+
+/* ---------- sync config (device-local secrets) ---------- */
+let sync=loadSync();
+function loadSync(){ try{ const o=JSON.parse(store.getItem(SYNCKEY)||"{}"); if(!o.myDeviceId){ o.myDeviceId=Math.random().toString(36).slice(2,10); store.setItem(SYNCKEY,JSON.stringify(o)); } return o; }
+  catch(e){ return {myDeviceId:Math.random().toString(36).slice(2,10)}; } }
+function saveSync(){ store.setItem(SYNCKEY,JSON.stringify(sync)); }
+const isSyncOn=()=>!!(sync.token&&sync.gistId);
+
+/* ---------- state ---------- */
+const defaults={
+  config:{ weeklyTarget:32, workingDays:[1,2,3,4], weekStart:1, fullWeekly:40, fte:0.8 },
+  sessions:[],        // {start:ISO, end:ISO|null}
+  outDays:{},         // "YYYY-MM-DD": "Holiday"
+  meta:{ updatedAt:0, deviceId:null }   // updatedAt drives last-write-wins
+};
+let state=load();
+function load(){ try{const raw=store.getItem(KEY); if(!raw)return structuredClone(defaults);
+  const p=JSON.parse(raw);
+  const meta=p.meta||{ updatedAt:Date.now(), deviceId:null }; // migrate: existing local data counts as authoritative
+  return {config:{...defaults.config,...p.config}, sessions:p.sessions||[], outDays:p.outDays||{}, meta};}
+  catch(e){return structuredClone(defaults);} }
+/* persist() = write locally only (used when adopting remote — must NOT restamp).
+   save()    = a real user change: stamp updatedAt, write locally, queue a push. */
+function persist(){ store.setItem(KEY,JSON.stringify(state)); }
+function save(){ state.meta={ updatedAt:Date.now(), deviceId:sync.myDeviceId }; persist(); schedulePush(); }
+
+/* ---------- helpers ---------- */
+const now=()=>Date.now();
+const iso=d=>{const x=new Date(d);return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,"0")}-${String(x.getDate()).padStart(2,"0")}`;};
+const dayStart=d=>{const x=new Date(d);x.setHours(0,0,0,0);return x.getTime();};
+const dayEnd=d=>dayStart(d)+86400000;
+function overlap(s,a,b){ const st=new Date(s.start).getTime(); const en=s.end?new Date(s.end).getTime():now(); return Math.max(0,Math.min(en,b)-Math.max(st,a)); }
+function workedBetween(a,b){ let t=0; for(const s of state.sessions) t+=overlap(s,a,b); return t; }
+const openSession=()=>state.sessions.find(s=>!s.end);
+function weekStartOf(d){ const x=new Date(dayStart(d)); const ws=state.config.weekStart; let diff=(x.getDay()-ws+7)%7; x.setDate(x.getDate()-diff); return x.getTime(); }
+function quarterOf(d){ const x=new Date(d); const q=Math.floor(x.getMonth()/3); const start=new Date(x.getFullYear(),q*3,1).getTime(); const end=new Date(x.getFullYear(),q*3+3,1).getTime(); return {q:q+1,year:x.getFullYear(),start,end}; }
+const dailyTarget=()=>{ const n=state.config.workingDays.length; return n?state.config.weeklyTarget/n:0; }; // hours
+const isWorkDay=ts=>state.config.workingDays.includes(new Date(ts).getDay()) && !state.outDays[iso(ts)];
+
+function fmtHM(ms,withSec){ if(ms<0)ms=0; const tot=Math.floor(ms/1000); const h=Math.floor(tot/3600); const m=Math.floor((tot%3600)/60); const s=tot%60;
+  if(withSec) return `${h}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
+  return `${h}h ${String(m).padStart(2,"0")}m`; }
+function bigHM(ms){ if(ms<0)ms=0; const tot=Math.floor(ms/1000),h=Math.floor(tot/3600),m=Math.floor((tot%3600)/60),s=tot%60;
+  const open=openSession();
+  return open? `${h}<span class="u">:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}</span>`
+             : `${h}<span class="u">:${String(m).padStart(2,"0")}</span>`; }
+function toast(msg){ const t=document.getElementById("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove("show"),1800); }
+
+/* ---------- toggle (shared by button + NFC url) ---------- */
+let lastToggle=0;
+function toggleClock(fromNfc){
+  const t=now();
+  if(fromNfc && t-lastToggle<2500){ return; } // ignore accidental double-scan
+  lastToggle=t;
+  const open=openSession();
+  if(open){ open.end=new Date(t).toISOString(); toast("Clocked out"); }
+  else{ state.sessions.push({start:new Date(t).toISOString(),end:null}); toast("Clocked in"); }
+  save(); render();  // save() stamps + queues a push; the tap always wins locally first
+}
+
+/* ---------- gist sync (browser-only, no server) ---------- */
+const GH="https://api.github.com", GFILE="timeclock.json";
+function ghHeaders(){ return {"Authorization":"Bearer "+sync.token,"Accept":"application/vnd.github+json","Content-Type":"application/json","X-GitHub-Api-Version":"2022-11-28"}; }
+async function ghGet(){
+  const r=await fetch(`${GH}/gists/${sync.gistId}`,{headers:ghHeaders()});
+  if(!r.ok) throw new Error("read "+r.status);
+  const j=await r.json(); const f=j.files&&j.files[GFILE];
+  if(!f) return null;
+  let content=f.content;
+  if(f.truncated && f.raw_url){ content=await (await fetch(f.raw_url)).text(); }
+  try{ return JSON.parse(content); }catch(e){ return null; }
+}
+async function ghPatch(){
+  const body={files:{[GFILE]:{content:JSON.stringify(state)}}};
+  const r=await fetch(`${GH}/gists/${sync.gistId}`,{method:"PATCH",headers:ghHeaders(),body:JSON.stringify(body)});
+  if(!r.ok) throw new Error("write "+r.status);
+}
+async function ghCreate(){
+  const body={description:"Timeclock sync (private)",public:false,files:{[GFILE]:{content:JSON.stringify(state)}}};
+  const r=await fetch(`${GH}/gists`,{method:"POST",headers:ghHeaders(),body:JSON.stringify(body)});
+  if(!r.ok) throw new Error("create "+r.status);
+  return (await r.json()).id;
+}
+
+let syncStatus="off", pushTimer=null;   // off | ok | syncing | pending | offline | error
+function setSync(s){ syncStatus=s; paintSync(); }
+function schedulePush(){ if(!isSyncOn())return; setSync("pending"); clearTimeout(pushTimer); pushTimer=setTimeout(doPush,2000); }
+async function doPush(){ if(!isSyncOn())return; setSync("syncing");
+  try{ await ghPatch(); sync.lastSyncedAt=Date.now(); saveSync(); setSync("ok"); }
+  catch(e){ setSync(navigator.onLine?"error":"offline"); } }
+async function syncNow(){   // reconcile both directions (also the pull-on-open)
+  if(!isSyncOn()){ setSync("off"); return; }
+  setSync("syncing");
+  try{
+    const remote=await ghGet();
+    if(remote && remote.meta){
+      const rU=remote.meta.updatedAt||0, lU=state.meta.updatedAt||0;
+      if(rU>lU){ state={config:{...defaults.config,...remote.config}, sessions:remote.sessions||[], outDays:remote.outDays||{}, meta:remote.meta}; persist(); render(); refreshSheet(); }
+      else if(lU>rU){ await ghPatch(); }
+    } else { await ghPatch(); }   // gist empty/new → seed it with local
+    sync.lastSyncedAt=Date.now(); saveSync(); setSync("ok");
+  }catch(e){ setSync(navigator.onLine?"error":"offline"); }
+}
+window.addEventListener("online",()=>{ if(isSyncOn()) syncNow(); });
+
+/* ---------- render ---------- */
+function render(){
+  const open=openSession();
+  const today0=dayStart(now());
+  const todayMs=workedBetween(today0,now());
+  const tgtMs=dailyTarget()*HR;
+
+  // hero
+  const hero=document.getElementById("hero");
+  hero.classList.toggle("on",!!open);
+  document.getElementById("statusText").textContent=open?"Working":"Not working";
+  document.getElementById("todayBig").innerHTML=bigHM(todayMs);
+  const punch=document.getElementById("punch");
+  punch.className="punch "+(open?"in":"out");
+  document.getElementById("punchLabel").textContent=open?"Clock out":"Clock in";
+  if(open){ const since=new Date(open.start); document.getElementById("sessionLine").innerHTML=
+      `On the clock since <b>${String(since.getHours()).padStart(2,"0")}:${String(since.getMinutes()).padStart(2,"0")}</b> · this session ${fmtHM(now()-since.getTime())}`; }
+  else document.getElementById("sessionLine").textContent= todayMs>0? `${state.sessions.filter(s=>overlap(s,today0,dayEnd(now()))>0).length} session(s) today` : "Tap the sticker or the button to clock in";
+  document.title=open?`▶ ${fmtHM(todayMs,true)} · Timeclock`:"Timeclock";
+
+  // today card
+  const scheduled=isWorkDay(today0);
+  document.getElementById("todayTarget").textContent= scheduled?`target ${fmtHM(tgtMs)}`:(state.outDays[iso(today0)]?`off · ${state.outDays[iso(today0)]}`:"not a work day");
+  const remainEl=document.getElementById("todayRemain"); const rem=tgtMs-todayMs;
+  if(!scheduled){ remainEl.className="remain done"; remainEl.innerHTML=`<span class="big mono">—</span><span class="lbl">no target today</span>`; document.getElementById("todaySub").textContent= todayMs>0?`+${fmtHM(todayMs)} banked`:""; }
+  else if(rem<=0){ remainEl.className="remain done"; remainEl.innerHTML=`<span class="big mono">✓ done</span><span class="lbl">${rem<0?"+"+fmtHM(-rem)+" over":""}</span>`; document.getElementById("todaySub").textContent=`Worked ${fmtHM(todayMs)} of ${fmtHM(tgtMs)}`; }
+  else{ remainEl.className="remain"; remainEl.innerHTML=`<span class="big mono">${fmtHM(rem)}</span><span class="lbl">to go</span>`; document.getElementById("todaySub").textContent=`Worked ${fmtHM(todayMs)} of ${fmtHM(tgtMs)}`; }
+
+  // week card
+  const ws=weekStartOf(now()); const we=ws+7*86400000;
+  const weekMs=workedBetween(ws,Math.min(we,now()+HR*0)+ (open?0:0)); // sum full sessions in week window
+  const weekMsAll=workedBetween(ws,we);
+  const wTgt=state.config.weeklyTarget*HR;
+  document.getElementById("weekWorked").textContent=fmtHM(weekMsAll);
+  document.getElementById("weekTargetLbl").textContent=`of ${state.config.weeklyTarget}h`;
+  const pct=Math.min(100,wTgt? weekMsAll/wTgt*100:0);
+  const wbar=document.getElementById("weekBar"); wbar.querySelector("i").style.width=pct+"%"; wbar.classList.toggle("over",weekMsAll>wTgt);
+  const wrem=wTgt-weekMsAll;
+  document.getElementById("weekSub").textContent= wrem>0?`${fmtHM(wrem)} left this week`:`${fmtHM(-wrem)} over the weekly target`;
+  const wsD=new Date(ws), weD=new Date(we-86400000);
+  document.getElementById("weekRange").textContent=`${wsD.getDate()}/${wsD.getMonth()+1} – ${weD.getDate()}/${weD.getMonth()+1}`;
+  // per-day bars
+  const names=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+  let maxDay=tgtMs;
+  const dayMsArr=[]; for(let i=0;i<7;i++){ const d0=ws+i*86400000; const m=workedBetween(d0,d0+86400000); dayMsArr.push(m); if(m>maxDay)maxDay=m; }
+  const row=document.getElementById("weekRow"); row.innerHTML="";
+  for(let i=0;i<7;i++){ const d0=ws+i*86400000; const m=dayMsArr[i]; const wd=new Date(d0).getDay();
+    const isToday=iso(d0)===iso(now()); const off=!state.config.workingDays.includes(wd); const out=!!state.outDays[iso(d0)];
+    const h=maxDay?Math.max(m>0?8:0,Math.round(m/maxDay*46)):0;
+    const el=document.createElement("div"); el.className="day"+(isToday?" today":"")+(off?" off":"")+(out?" out":"");
+    el.innerHTML=`<div class="col"><i style="height:${h}px"></i></div><div class="dl">${names[wd][0]}</div><div class="dh">${m>0?(m/HR).toFixed(1):""}</div>`;
+    row.appendChild(el); }
+
+  // quarter card
+  const Q=quarterOf(now());
+  document.getElementById("qname").textContent=`Q${Q.q}`;
+  document.getElementById("qdates").textContent=`${Q.year}`;
+  document.getElementById("qtag").textContent=`Q${Q.q} ${Q.year}`;
+  const qWorkedMs=workedBetween(Q.start,Math.min(Q.end,now()));
+  // required so far: scheduled non-out days from quarter start up to & incl today
+  let reqDays=0, remDays=0;
+  for(let t=Q.start;t<Q.end;t+=86400000){ if(isWorkDay(t)){ if(t<=today0) reqDays++; else remDays++; } }
+  const reqSoFar=reqDays*dailyTarget()*HR;
+  const fullReq=(reqDays+remDays)*dailyTarget()*HR;
+  const bal=qWorkedMs-reqSoFar;
+  document.getElementById("qWorked").textContent=fmtHM(qWorkedMs);
+  document.getElementById("qRequired").textContent=fmtHM(reqSoFar);
+  const bEl=document.getElementById("qBalance");
+  const ahead=bal>=0;
+  bEl.className="balance "+(ahead?"ahead":"behind");
+  bEl.innerHTML=`<span class="num mono">${ahead?"+":"−"}${fmtHM(Math.abs(bal))}</span><span class="tag">${ahead?"ahead of pace":"behind pace"}</span>`;
+  const leftForQuarter=fullReq-qWorkedMs;
+  const paceEl=document.getElementById("qPace");
+  if(remDays>0 && leftForQuarter>0){ paceEl.textContent=`${remDays} work days left · ${fmtHM(leftForQuarter/remDays)}/day to finish the quarter on target`; }
+  else if(leftForQuarter<=0){ paceEl.textContent=`Quarter target already met · +${fmtHM(-leftForQuarter)} surplus`; }
+  else paceEl.textContent=`${fmtHM(leftForQuarter)} still required this quarter`;
+
+  // memory banner + tag url
+  document.getElementById("memBanner").style.display=usingMemory?"block":"none";
+  if(usingMemory) document.getElementById("memBanner").textContent="Preview mode — this environment can't save data, so nothing persists here. Download the file and host it (or open it on your phone) for real, persistent tracking.";
+  const base=location.href.split("?")[0].split("#")[0];
+  document.getElementById("tagUrl").textContent= location.protocol.startsWith("http")? base+"?a=toggle" : "Host this file at an https URL first, then this box will show the tag address.";
+}
+
+/* ---------- NFC url handling (toggle locally first, then sync) ---------- */
+(function(){ const p=new URLSearchParams(location.search); if(p.get("a")==="toggle"){ toggleClock(true); history.replaceState({},"",location.pathname); } })();
+
+/* ---------- sync status painting ---------- */
+const SYNC_UI={ off:["",""], ok:["var(--active)","Synced"], syncing:["var(--amber)","Syncing…"], pending:["var(--amber)","Unsynced changes"], offline:["var(--faint)","Offline"], error:["var(--behind)","Sync error"] };
+function relTime(ts){ if(!ts)return""; const d=new Date(ts); return `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`; }
+function paintSync(){
+  const dot=document.getElementById("syncDot");
+  const [color,label]=SYNC_UI[syncStatus]||["",""];
+  dot.style.display=isSyncOn()?"grid":"none";
+  dot.style.color=color||"var(--faint)";
+  dot.title=label+(sync.lastSyncedAt?` · last ${relTime(sync.lastSyncedAt)}`:"");
+  dot.classList.toggle("spin",syncStatus==="syncing");
+  const st=document.getElementById("syncStatusLine");
+  if(st){ if(!isSyncOn()) st.textContent="Not connected."; else st.textContent=`${label||"—"}${sync.lastSyncedAt?` · last synced ${relTime(sync.lastSyncedAt)}`:""}`; }
+}
+function refreshSheet(){ if(!sheet.classList.contains("open"))return; fillSettings(); fillSessions(); fillOff(); }
+
+/* ---------- UI wiring ---------- */
+document.getElementById("punch").addEventListener("click",()=>toggleClock(false));
+const sheet=document.getElementById("sheet");
+document.getElementById("openManage").addEventListener("click",()=>{openSheet();});
+document.getElementById("closeSheet").addEventListener("click",()=>sheet.classList.remove("open"));
+sheet.addEventListener("click",e=>{if(e.target===sheet)sheet.classList.remove("open");});
+document.querySelectorAll(".seg button").forEach(b=>b.addEventListener("click",()=>{
+  document.querySelectorAll(".seg button").forEach(x=>x.classList.remove("active"));
+  document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
+  b.classList.add("active"); document.getElementById("tab-"+b.dataset.tab).classList.add("active");
+}));
+function openSheet(){ fillSettings(); fillSessions(); fillOff(); fillSync(); const d=iso(now()); document.getElementById("mDate").value=d; document.getElementById("oFrom").value=d; document.getElementById("oTo").value=d; sheet.classList.add("open"); }
+
+/* settings */
+function fillSettings(){
+  document.getElementById("sWeekly").value=state.config.weeklyTarget;
+  document.getElementById("sWeekStart").value=state.config.weekStart;
+  const names=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"]; const map=[1,2,3,4,5,6,0];
+  const box=document.getElementById("sDays"); box.innerHTML="";
+  map.forEach((wd,i)=>{ const b=document.createElement("button"); b.textContent=names[i]; b.dataset.wd=wd;
+    if(state.config.workingDays.includes(wd))b.classList.add("on");
+    b.addEventListener("click",()=>{b.classList.toggle("on");updateHelps();}); box.appendChild(b); });
+  updateHelps();
+}
+function currentDays(){ return [...document.querySelectorAll("#sDays button.on")].map(b=>+b.dataset.wd); }
+function updateHelps(){
+  const w=parseFloat(document.getElementById("sWeekly").value)||0; const n=currentDays().length;
+  document.getElementById("fteHelp").textContent=`e.g. 80% of a 40h week = 32h. You're at ${(w/40*100||0).toFixed(0)}% of a 40h full-timer.`;
+  document.getElementById("dailyHelp").textContent= n? `Daily target: ${fmtHM(w/n*HR)}  (${w}h ÷ ${n} days)` : "Pick at least one working day.";
+}
+document.getElementById("sWeekly").addEventListener("input",updateHelps);
+document.getElementById("saveSettings").addEventListener("click",()=>{
+  const w=parseFloat(document.getElementById("sWeekly").value); const days=currentDays();
+  if(!(w>0)){toast("Enter a weekly target");return;} if(!days.length){toast("Pick working days");return;}
+  state.config.weeklyTarget=w; state.config.workingDays=days.sort(); state.config.weekStart=+document.getElementById("sWeekStart").value;
+  save(); render(); toast("Schedule saved");
+});
+
+/* sessions */
+function fillSessions(){
+  const list=document.getElementById("sessionList"); list.innerHTML="";
+  const sorted=[...state.sessions].filter(s=>s.end).sort((a,b)=>new Date(b.start)-new Date(a.start)).slice(0,40);
+  if(!sorted.length){ list.innerHTML='<div class="empty">No completed sessions yet.</div>'; return; }
+  const groups={}; for(const s of sorted){ const k=iso(s.start); (groups[k]=groups[k]||[]).push(s); }
+  for(const k of Object.keys(groups)){
+    const g=document.createElement("div"); g.className="daygroup";
+    let tot=0; groups[k].forEach(s=>tot+=new Date(s.end)-new Date(s.start));
+    const dd=new Date(k+"T00:00"); const nm=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][dd.getDay()];
+    g.innerHTML=`<div class="gh"><span>${nm} ${dd.getDate()}/${dd.getMonth()+1}</span><b>${fmtHM(tot)}</b></div>`;
+    groups[k].forEach(s=>{ const st=new Date(s.start),en=new Date(s.end); const idx=state.sessions.indexOf(s);
+      const it=document.createElement("div"); it.className="item";
+      it.innerHTML=`<div class="meta"><span class="h">${String(st.getHours()).padStart(2,"0")}:${String(st.getMinutes()).padStart(2,"0")} – ${String(en.getHours()).padStart(2,"0")}:${String(en.getMinutes()).padStart(2,"0")}</span> <span class="d">(${fmtHM(en-st)})</span></div><button class="x" data-i="${idx}">×</button>`;
+      it.querySelector(".x").addEventListener("click",()=>{ state.sessions.splice(idx,1); save(); render(); fillSessions(); toast("Session removed"); });
+      g.appendChild(it); });
+    list.appendChild(g);
+  }
+}
+document.getElementById("addSession").addEventListener("click",()=>{
+  const d=document.getElementById("mDate").value, s=document.getElementById("mStart").value, e=document.getElementById("mEnd").value;
+  if(!d||!s||!e){toast("Fill date, start and end");return;}
+  const start=new Date(`${d}T${s}`), end=new Date(`${d}T${e}`);
+  if(end<=start){toast("End must be after start");return;}
+  state.sessions.push({start:start.toISOString(),end:end.toISOString()}); save(); render(); fillSessions(); toast("Session added");
+});
+
+/* time off */
+function fillOff(){
+  const list=document.getElementById("offList"); list.innerHTML="";
+  const keys=Object.keys(state.outDays).sort().reverse();
+  if(!keys.length){ list.innerHTML='<div class="empty">No days off marked.</div>'; return; }
+  for(const k of keys){ const dd=new Date(k+"T00:00"); const nm=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][dd.getDay()];
+    const it=document.createElement("div"); it.className="item";
+    it.innerHTML=`<div class="meta"><span class="h">${nm} ${dd.getDate()}/${dd.getMonth()+1}/${dd.getFullYear()}</span> <span class="d">${state.outDays[k]}</span></div><button class="x">×</button>`;
+    it.querySelector(".x").addEventListener("click",()=>{ delete state.outDays[k]; save(); render(); fillOff(); toast("Removed"); });
+    list.appendChild(it); }
+}
+document.getElementById("addOff").addEventListener("click",()=>{
+  const f=document.getElementById("oFrom").value, t=document.getElementById("oTo").value, ty=document.getElementById("oType").value;
+  if(!f||!t){toast("Pick dates");return;}
+  let a=new Date(f+"T00:00"), b=new Date(t+"T00:00"); if(b<a){const tmp=a;a=b;b=tmp;}
+  for(let d=new Date(a); d<=b; d.setDate(d.getDate()+1)) state.outDays[iso(d)]=ty;
+  save(); render(); fillOff(); toast("Days marked off");
+});
+
+/* nfc + backup */
+document.getElementById("copyUrl").addEventListener("click",async()=>{ const txt=document.getElementById("tagUrl").textContent;
+  try{await navigator.clipboard.writeText(txt);toast("URL copied");}catch(e){toast("Copy failed — long-press to select");} });
+document.getElementById("exportBtn").addEventListener("click",()=>{
+  const blob=new Blob([JSON.stringify(state,null,2)],{type:"application/json"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=`timeclock-backup-${iso(now())}.json`; a.click(); URL.revokeObjectURL(a.href); });
+document.getElementById("copyBtn").addEventListener("click",async()=>{ try{await navigator.clipboard.writeText(JSON.stringify(state));toast("Backup copied");}catch(e){toast("Copy failed");} });
+document.getElementById("importBtn").addEventListener("click",()=>{
+  try{ const p=JSON.parse(document.getElementById("importArea").value); if(!p.config||!Array.isArray(p.sessions))throw 0;
+    state={config:{...defaults.config,...p.config},sessions:p.sessions,outDays:p.outDays||{}}; save(); render(); fillSettings(); fillSessions(); fillOff(); toast("Backup restored"); document.getElementById("importArea").value="";
+  }catch(e){toast("That doesn't look like a valid backup");} });
+document.getElementById("wipeBtn").addEventListener("click",()=>{ const msg=isSyncOn()?"Erase all data on this device AND overwrite the synced gist with an empty copy?":"Erase all sessions, days off and settings on this device?"; if(confirm(msg)){ state=structuredClone(defaults); save(); render(); fillSettings(); fillSessions(); fillOff(); toast("Data erased"); } });
+
+/* ---------- sync tab ---------- */
+function fillSync(){
+  document.getElementById("syTokenInput").value=sync.token||"";
+  document.getElementById("syGistInput").value=sync.gistId||"";
+  paintSync();
+}
+document.getElementById("syConnect").addEventListener("click",async()=>{
+  const tok=document.getElementById("syTokenInput").value.trim();
+  const gid=document.getElementById("syGistInput").value.trim();
+  if(!tok){toast("Paste a token first");return;}
+  if(!gid){toast("Enter a gist ID (or create one)");return;}
+  sync.token=tok; sync.gistId=gid; saveSync();
+  toast("Connecting…"); await syncNow();
+  if(syncStatus==="ok") toast("Connected & synced"); else if(syncStatus==="error") toast("Check the token / gist ID");
+});
+document.getElementById("syCreate").addEventListener("click",async()=>{
+  const tok=document.getElementById("syTokenInput").value.trim();
+  if(!tok){toast("Paste a token first");return;}
+  sync.token=tok; saveSync(); toast("Creating gist…"); setSync("syncing");
+  try{ const id=await ghCreate(); sync.gistId=id; saveSync(); document.getElementById("syGistInput").value=id; sync.lastSyncedAt=Date.now(); saveSync(); setSync("ok"); toast("Gist created — copy its ID for other devices"); }
+  catch(e){ setSync("error"); toast("Couldn't create — check the token's gist scope"); }
+});
+document.getElementById("syNow").addEventListener("click",async()=>{ if(!isSyncOn()){toast("Connect first");return;} toast("Syncing…"); await syncNow(); if(syncStatus==="ok")toast("Up to date"); });
+document.getElementById("syCopyGist").addEventListener("click",async()=>{ const g=document.getElementById("syGistInput").value.trim(); if(!g){toast("No gist ID yet");return;} try{await navigator.clipboard.writeText(g);toast("Gist ID copied");}catch(e){toast("Copy failed");} });
+document.getElementById("syDisconnect").addEventListener("click",()=>{ delete sync.token; delete sync.gistId; delete sync.lastSyncedAt; saveSync(); setSync("off"); fillSync(); toast("Disconnected (local data kept)"); });
+document.getElementById("syncDot").addEventListener("click",()=>{ openSheet(); document.querySelector('.seg button[data-tab="sync"]').click(); });
+
+/* ---------- tick + startup ---------- */
+setInterval(()=>{ if(openSession()) render(); },1000);
+render();
+paintSync();
+if(isSyncOn()) syncNow();   // pull-on-open reconcile
+</script>
+</body>
+</html>
