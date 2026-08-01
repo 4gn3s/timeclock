@@ -344,6 +344,8 @@ p.shp{font-size:12.5px;color:var(--muted);padding:0 2px 4px;line-height:1.5}
 <script>
 "use strict";
 const HR=3600000, MIN=60000;
+/* UI labels for sync status — declared up here so nothing can reach it before it exists */
+const SYNC_UI={ off:["",""], ok:["var(--active)","Synced"], syncing:["var(--amber)","Syncing…"], pending:["var(--amber)","Unsynced changes"], offline:["var(--faint)","Offline"], error:["var(--behind)","Sync error"] };
 /* ---------- storage with in-memory fallback (Claude preview / private mode) ---------- */
 let usingMemory=false;
 const store=(()=>{ try{const t="__tc_probe";localStorage.setItem(t,"1");localStorage.removeItem(t);return localStorage;}
@@ -365,12 +367,13 @@ const defaults={
   outDays:{},         // "YYYY-MM-DD": "Holiday"
   meta:{ updatedAt:0, deviceId:null }   // updatedAt drives last-write-wins
 };
+const freshState=()=>JSON.parse(JSON.stringify(defaults));  // universal deep clone
 let state=load();
-function load(){ try{const raw=store.getItem(KEY); if(!raw)return structuredClone(defaults);
+function load(){ try{const raw=store.getItem(KEY); if(!raw)return freshState();
   const p=JSON.parse(raw);
   const meta=p.meta||{ updatedAt:Date.now(), deviceId:null }; // migrate: existing local data counts as authoritative
   return {config:{...defaults.config,...p.config}, sessions:p.sessions||[], outDays:p.outDays||{}, meta};}
-  catch(e){return structuredClone(defaults);} }
+  catch(e){return freshState();} }
 /* persist() = write locally only (used when adopting remote — must NOT restamp).
    save()    = a real user change: stamp updatedAt, write locally, queue a push. */
 function persist(){ store.setItem(KEY,JSON.stringify(state)); }
@@ -546,11 +549,7 @@ function render(){
   document.getElementById("tagUrl").textContent= location.protocol.startsWith("http")? base+"?a=toggle" : "Host this file at an https URL first, then this box will show the tag address.";
 }
 
-/* ---------- NFC url handling (toggle locally first, then sync) ---------- */
-(function(){ const p=new URLSearchParams(location.search); if(p.get("a")==="toggle"){ toggleClock(true); history.replaceState({},"",location.pathname); } })();
-
 /* ---------- sync status painting ---------- */
-const SYNC_UI={ off:["",""], ok:["var(--active)","Synced"], syncing:["var(--amber)","Syncing…"], pending:["var(--amber)","Unsynced changes"], offline:["var(--faint)","Offline"], error:["var(--behind)","Sync error"] };
 function relTime(ts){ if(!ts)return""; const d=new Date(ts); return `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`; }
 function paintSync(){
   const dot=document.getElementById("syncDot");
@@ -675,7 +674,7 @@ document.getElementById("importBtn").addEventListener("click",()=>{
   try{ const p=JSON.parse(document.getElementById("importArea").value); if(!p.config||!Array.isArray(p.sessions))throw 0;
     state={config:{...defaults.config,...p.config},sessions:p.sessions,outDays:p.outDays||{}}; save(); render(); fillSettings(); fillSessions(); fillOff(); toast("Backup restored"); document.getElementById("importArea").value="";
   }catch(e){toast("That doesn't look like a valid backup");} });
-document.getElementById("wipeBtn").addEventListener("click",()=>{ const msg=isSyncOn()?"Erase all data on this device AND overwrite the synced gist with an empty copy?":"Erase all sessions, days off and settings on this device?"; if(confirm(msg)){ state=structuredClone(defaults); save(); render(); fillSettings(); fillSessions(); fillOff(); toast("Data erased"); } });
+document.getElementById("wipeBtn").addEventListener("click",()=>{ const msg=isSyncOn()?"Erase all data on this device AND overwrite the synced gist with an empty copy?":"Erase all sessions, days off and settings on this device?"; if(confirm(msg)){ state=freshState(); save(); render(); fillSettings(); fillSessions(); fillOff(); toast("Data erased"); } });
 
 /* ---------- sync tab ---------- */
 function fillSync(){
@@ -716,7 +715,15 @@ if("NDEFReader" in window){
 setInterval(()=>{ if(openSession()) render(); },1000);
 render();
 paintSync();
-if(isSyncOn()) syncNow();   // pull-on-open reconcile
+
+/* NFC url toggle runs LAST, so every listener above is already attached.
+   Guarded so a failure here can never take down the rest of the page. */
+try{
+  const p=new URLSearchParams(location.search);
+  if(p.get("a")==="toggle"){ toggleClock(true); history.replaceState({},"",location.pathname); }
+}catch(err){ console.error("NFC toggle failed:",err); toast("Toggle failed — see console"); }
+
+if(isSyncOn()) syncNow();   // pull-on-open reconcile (respects pendingPush)
 </script>
 </body>
 </html>
